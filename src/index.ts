@@ -629,6 +629,20 @@ program
     const engine = resolveEngineMode(opts.engine || config.engine);
     const useSweetistics = shouldUseSweetistics(engine, Boolean(sweetistics.apiKey));
     const resolvedEngine = useSweetistics ? 'sweetistics' : 'graphql';
+    const credentialSource =
+      resolvedEngine === 'sweetistics'
+        ? sweetistics.apiKey
+          ? 'Sweetistics API key'
+          : 'none'
+        : opts.chromeProfile
+            ? `Chrome profile "${opts.chromeProfile}"`
+            : opts.firefoxProfile
+                ? `Firefox profile "${opts.firefoxProfile}"`
+                : config.chromeProfile
+                    ? `Chrome profile "${config.chromeProfile}"`
+                    : config.firefoxProfile
+                        ? `Firefox profile "${config.firefoxProfile}"`
+                        : 'env/auto-detected cookies';
 
     if (useSweetistics) {
       if (!sweetistics.apiKey) {
@@ -648,6 +662,7 @@ program
           console.log(`📧 ${result.user.email}`);
         }
         console.log(`⚙️ Engine: ${resolvedEngine}`);
+        console.log(`🔑 Credentials: ${credentialSource}`);
         return;
       }
 
@@ -682,6 +697,7 @@ program
       console.log(`🙋 Logged in as @${result.user.username} (${result.user.name})`);
       console.log(`🪪 User ID: ${result.user.id}`);
       console.log(`⚙️ Engine: ${resolvedEngine}`);
+      console.log(`🔑 Credentials: ${credentialSource}`);
     } else {
       console.error(`❌ Failed to determine current user: ${result.error ?? 'Unknown error'}`);
       process.exit(1);

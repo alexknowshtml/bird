@@ -41,8 +41,11 @@ bird tweet "hello from bird"
 bird replies https://x.com/user/status/1234567890123456789
 ```
 
-Global engine switch:
-- `--engine graphql|sweetistics|auto` (default `auto`). `auto` uses Sweetistics when an API key is provided, otherwise falls back to direct GraphQL. `sweetistics` requires `--sweetistics-api-key` (or env) and uses Sweetistics for all commands. `graphql` forces direct Twitter cookies even if an API key is present.
+Transport (engine) selection:
+- `--engine graphql|sweetistics|auto` (default `auto`).
+  - `sweetistics`: use Sweetistics API key, no browser cookies needed.
+  - `graphql`: use Twitter/X GraphQL with cookies (Chrome/Firefox/env/flags).
+  - `auto`: Sweetistics if an API key is available, otherwise GraphQL.
 
 You can set persistent defaults via config files (JSON5):
 
@@ -146,12 +149,14 @@ bird check
    - Requires Chrome to be logged into x.com
    - May prompt for keychain access on first run
 
-### Browser cookie sources (macOS)
+### Credential sources (macOS)
 
-- **Chrome (default)**: reads `~/Library/Application Support/Google/Chrome/<Profile>/Cookies` (WAL/SHM copied too). Select with `--chrome-profile <name>`; defaults to `Default` or whatever you set in config.
-- **Firefox**: reads `~/Library/Application Support/Firefox/Profiles/<profile>/cookies.sqlite`. Select with `--firefox-profile <name>`; defaults to `*.default-release` if present. Use this when Chrome isn’t logged in.
+Used only when transport resolves to **graphql**:
+- **Chrome (default)**: `~/Library/Application Support/Google/Chrome/<Profile>/Cookies` (WAL/SHM copied too). `--chrome-profile <name>`.
+- **Firefox**: `~/Library/Application Support/Firefox/Profiles/<profile>/cookies.sqlite`. `--firefox-profile <name>` (defaults to `*.default-release` if present).
+- **Env/flags** always override browser cookies.
 
-Precedence still holds: CLI flags > env vars > project config > global config. So a one-off `--firefox-profile default-release` overrides any config defaults.
+Precedence: CLI flags > env vars > project config > global config. Transport is chosen first; then, if transport is GraphQL, cookie source is chosen.
 
 ### Posting via Sweetistics (API key)
 

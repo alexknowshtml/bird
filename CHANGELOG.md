@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1 — Unreleased
+## 0.1.1 — 2025-12-26
 
 ### Changed
 - Engine default now `auto` (GraphQL primary; Sweetistics only on fallback when configured).

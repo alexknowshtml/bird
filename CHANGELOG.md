@@ -5,6 +5,9 @@
 ### Fixed
 - CLI `--version`: read version from `package.json`/`VERSION` (no hardcoded string) + append git sha when available.
 
+### Changed
+- `mentions`: no hardcoded user; defaults to authenticated user or accepts `--user @handle`.
+
 ## 0.1.1 — 2025-12-26
 
 ### Changed

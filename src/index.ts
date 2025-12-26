@@ -19,6 +19,7 @@ import { resolveCliInvocation } from './lib/cli-args.js';
 import { resolveCredentials } from './lib/cookies.js';
 import { type EngineMode, resolveEngineMode, shouldUseSweetistics } from './lib/engine.js';
 import { extractTweetId } from './lib/extract-tweet-id.js';
+import { normalizeHandle } from './lib/normalize-handle.js';
 import { SweetisticsClient } from './lib/sweetistics-client.js';
 import { type TweetData, TwitterClient } from './lib/twitter-client.js';
 import { getCliVersion } from './lib/version.js';
@@ -804,16 +805,20 @@ program
 // Mentions command - shortcut to search for @username mentions
 program
   .command('mentions')
-  .description('Find tweets mentioning @clawdbot')
+  .description('Find tweets mentioning a user (defaults to current user)')
+  .option('-u, --user <handle>', 'User handle (e.g. @steipete)')
   .option('-n, --count <number>', 'Number of tweets to fetch', '10')
   .option('--json', 'Output as JSON')
-  .action(async (cmdOpts: { count?: string; json?: boolean }) => {
+  .action(async (cmdOpts: { user?: string; count?: string; json?: boolean }) => {
     const opts = program.opts();
     const timeoutMs = resolveTimeoutFromOptions(opts);
     const count = Number.parseInt(cmdOpts.count || '10', 10);
     const sweetistics = resolveSweetisticsConfig(opts);
     const engine = resolveEngineMode(opts.engine);
     const useSweetistics = shouldUseSweetistics(engine, Boolean(sweetistics.apiKey));
+
+    const explicitHandle = normalizeHandle(cmdOpts.user);
+    let query: string | null = explicitHandle ? `@${explicitHandle}` : null;
 
     if (useSweetistics) {
       if (!sweetistics.apiKey) {
@@ -825,7 +830,18 @@ program
         apiKey: sweetistics.apiKey,
         timeoutMs,
       });
-      const result = await client.search('@clawdbot', count);
+
+      if (!query) {
+        const who = await client.getCurrentUser();
+        const handle = normalizeHandle(who.user?.username);
+        if (!handle) {
+          console.error(`❌ Could not determine current user (${who.error ?? 'Unknown error'}). Use --user <handle>.`);
+          process.exit(1);
+        }
+        query = `@${handle}`;
+      }
+
+      const result = await client.search(query, count);
       if (result.success && result.tweets) {
         printTweets(result.tweets, { json: cmdOpts.json, emptyMessage: 'No mentions found.' });
         return;
@@ -850,7 +866,36 @@ program
     }
 
     const client = new TwitterClient({ cookies, timeoutMs });
-    const result = await client.search('@clawdbot', count);
+
+    if (!query) {
+      const who = await client.getCurrentUser();
+      const handle = normalizeHandle(who.user?.username);
+      if (!handle) {
+        if (sweetistics.apiKey) {
+          console.error(
+            `⚠️ Could not determine current user (${who.error ?? 'Unknown error'}); trying Sweetistics fallback...`,
+          );
+          const fallbackWho = await new SweetisticsClient({
+            baseUrl: sweetistics.baseUrl,
+            apiKey: sweetistics.apiKey,
+            timeoutMs,
+          }).getCurrentUser();
+          const fallbackHandle = normalizeHandle(fallbackWho.user?.username);
+          if (!fallbackHandle) {
+            console.error(`❌ Could not determine current user. Use --user <handle>.`);
+            process.exit(1);
+          }
+          query = `@${fallbackHandle}`;
+        } else {
+          console.error(`❌ Could not determine current user (${who.error ?? 'Unknown error'}). Use --user <handle>.`);
+          process.exit(1);
+        }
+      } else {
+        query = `@${handle}`;
+      }
+    }
+
+    const result = await client.search(query, count);
 
     if (result.success && result.tweets) {
       printTweets(result.tweets, { json: cmdOpts.json, emptyMessage: 'No mentions found.' });
@@ -860,7 +905,7 @@ program
         baseUrl: sweetistics.baseUrl,
         apiKey: sweetistics.apiKey,
         timeoutMs,
-      }).search('@clawdbot', count);
+      }).search(query, count);
       if (fallback.success && fallback.tweets) {
         printTweets(fallback.tweets, { json: cmdOpts.json, emptyMessage: 'No mentions found.' });
       } else {

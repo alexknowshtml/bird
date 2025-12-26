@@ -9,6 +9,9 @@
 - Removed the Sweetistics engine + fallback. `bird` is GraphQL-only.
 - Browser cookie fallback order: Safari → Chrome → Firefox.
 
+### Tests
+- Enforce coverage thresholds (>= 70% statements/branches/functions/lines) + expand unit coverage for version/output/Twitter client branches.
+
 ## 0.2.0 — 2025-12-26
 
 ### Added

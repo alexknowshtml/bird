@@ -17,6 +17,7 @@ import JSON5 from 'json5';
 import kleur from 'kleur';
 import { resolveCliInvocation } from './lib/cli-args.js';
 import { type CookieSource, resolveCredentials } from './lib/cookies.js';
+import { extractBookmarkFolderId } from './lib/extract-bookmark-folder-id.js';
 import { extractTweetId } from './lib/extract-tweet-id.js';
 import { mentionsQueryFromUserOption, normalizeHandle } from './lib/normalize-handle.js';
 import {
@@ -713,8 +714,9 @@ program
   .command('bookmarks')
   .description('Get your bookmarked tweets')
   .option('-n, --count <number>', 'Number of bookmarks to fetch', '20')
+  .option('--folder-id <id>', 'Bookmark folder (collection) id')
   .option('--json', 'Output as JSON')
-  .action(async (cmdOpts: { count?: string; json?: boolean }) => {
+  .action(async (cmdOpts: { count?: string; json?: boolean; folderId?: string }) => {
     const opts = program.opts();
     const timeoutMs = resolveTimeoutFromOptions(opts);
     const count = Number.parseInt(cmdOpts.count || '20', 10);
@@ -731,10 +733,18 @@ program
     }
 
     const client = new TwitterClient({ cookies, timeoutMs });
-    const result = await client.getBookmarks(count);
+    const folderId = cmdOpts.folderId ? extractBookmarkFolderId(cmdOpts.folderId) : null;
+    if (cmdOpts.folderId && !folderId) {
+      console.error(`${p('err')}Invalid --folder-id. Expected numeric ID or https://x.com/i/bookmarks/<id>.`);
+      process.exit(1);
+    }
+    const result = folderId
+      ? await client.getBookmarkFolderTimeline(folderId, count)
+      : await client.getBookmarks(count);
 
     if (result.success && result.tweets) {
-      printTweets(result.tweets, { json: cmdOpts.json, emptyMessage: 'No bookmarks found.' });
+      const emptyMessage = folderId ? 'No bookmarks found in folder.' : 'No bookmarks found.';
+      printTweets(result.tweets, { json: cmdOpts.json, emptyMessage });
     } else {
       console.error(`${p('err')}Failed to fetch bookmarks: ${result.error}`);
       process.exit(1);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { extractBookmarkFolderId } from '../src/lib/extract-bookmark-folder-id.js';
 import { extractTweetId } from '../src/lib/extract-tweet-id.js';
 
 describe('CLI utilities', () => {
@@ -27,6 +28,27 @@ describe('CLI utilities', () => {
       // Note: our regex handles this because \w+ matches any word chars after the domain
       const url = 'https://x.com/user_name/status/1234567890123456789';
       expect(extractTweetId(url)).toBe('1234567890123456789');
+    });
+  });
+
+  describe('extractBookmarkFolderId', () => {
+    it('should extract ID from x.com bookmarks URL', () => {
+      const url = 'https://x.com/i/bookmarks/1976792203235119344';
+      expect(extractBookmarkFolderId(url)).toBe('1976792203235119344');
+    });
+
+    it('should extract ID from twitter.com bookmarks URL', () => {
+      const url = 'https://twitter.com/i/bookmarks/1976792203235119344';
+      expect(extractBookmarkFolderId(url)).toBe('1976792203235119344');
+    });
+
+    it('should accept a numeric ID as-is', () => {
+      const id = '1976792203235119344';
+      expect(extractBookmarkFolderId(id)).toBe('1976792203235119344');
+    });
+
+    it('should return null for invalid values', () => {
+      expect(extractBookmarkFolderId('not-an-id')).toBeNull();
     });
   });
 });

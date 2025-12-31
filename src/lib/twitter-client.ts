@@ -28,6 +28,7 @@ const FALLBACK_QUERY_IDS = {
   SearchTimeline: 'M1jEez78PEfVfbQLvlWMvQ',
   UserArticlesTweets: '8zBy9h4L90aDL02RsBcCFg',
   Bookmarks: 'RV1g3b8n_SGOHwkqKYSCFw',
+  BookmarkFolderTimeline: 'KJIQpsvxrTfRIlbaRIySHQ',
 } as const;
 
 type OperationName = keyof typeof FALLBACK_QUERY_IDS;
@@ -1887,6 +1888,11 @@ export class TwitterClient {
     return Array.from(new Set([primary, 'RV1g3b8n_SGOHwkqKYSCFw', 'tmd4ifV8RHltzn8ymGg1aw']));
   }
 
+  private async getBookmarkFolderQueryIds(): Promise<string[]> {
+    const primary = await this.getQueryId('BookmarkFolderTimeline');
+    return Array.from(new Set([primary, 'KJIQpsvxrTfRIlbaRIySHQ']));
+  }
+
   /**
    * Get the authenticated user's bookmarks
    */
@@ -1976,6 +1982,113 @@ export class TwitterClient {
     if (firstAttempt.had404) {
       await this.refreshQueryIds();
       const secondAttempt = await tryOnce();
+      if (secondAttempt.success) {
+        return { success: true, tweets: secondAttempt.tweets };
+      }
+      return { success: false, error: secondAttempt.error };
+    }
+
+    return { success: false, error: firstAttempt.error };
+  }
+
+  /**
+   * Get the authenticated user's bookmark folder timeline
+   */
+  async getBookmarkFolderTimeline(folderId: string, count = 20): Promise<SearchResult> {
+    const variablesWithCount = {
+      bookmark_collection_id: folderId,
+      includePromotedContent: true,
+      count,
+    };
+
+    const variablesWithoutCount = {
+      bookmark_collection_id: folderId,
+      includePromotedContent: true,
+    };
+
+    const features = this.buildBookmarksFeatures();
+
+    const tryOnce = async (variables: Record<string, unknown>) => {
+      let lastError: string | undefined;
+      let had404 = false;
+      const queryIds = await this.getBookmarkFolderQueryIds();
+
+      const params = new URLSearchParams({
+        variables: JSON.stringify(variables),
+        features: JSON.stringify(features),
+      });
+
+      for (const queryId of queryIds) {
+        const url = `${TWITTER_API_BASE}/${queryId}/BookmarkFolderTimeline?${params}`;
+
+        try {
+          const response = await this.fetchWithTimeout(url, {
+            method: 'GET',
+            headers: this.getHeaders(),
+          });
+
+          if (response.status === 404) {
+            had404 = true;
+            lastError = `HTTP ${response.status}`;
+            continue;
+          }
+
+          if (!response.ok) {
+            const text = await response.text();
+            return { success: false as const, error: `HTTP ${response.status}: ${text.slice(0, 200)}`, had404 };
+          }
+
+          const data = (await response.json()) as {
+            data?: {
+              bookmark_collection_timeline?: {
+                timeline?: {
+                  instructions?: Array<{
+                    entries?: Array<{
+                      content?: {
+                        itemContent?: {
+                          tweet_results?: {
+                            result?: GraphqlTweetResult;
+                          };
+                        };
+                      };
+                    }>;
+                  }>;
+                };
+              };
+            };
+            errors?: Array<{ message: string }>;
+          };
+
+          if (data.errors && data.errors.length > 0) {
+            return { success: false as const, error: data.errors.map((e) => e.message).join(', '), had404 };
+          }
+
+          const instructions = data.data?.bookmark_collection_timeline?.timeline?.instructions;
+          const tweets = this.parseTweetsFromInstructions(instructions);
+
+          return { success: true as const, tweets, had404 };
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      return { success: false as const, error: lastError ?? 'Unknown error fetching bookmark folder', had404 };
+    };
+
+    let firstAttempt = await tryOnce(variablesWithCount);
+    if (!firstAttempt.success && firstAttempt.error?.includes('Variable "$count"')) {
+      firstAttempt = await tryOnce(variablesWithoutCount);
+    }
+    if (firstAttempt.success) {
+      return { success: true, tweets: firstAttempt.tweets };
+    }
+
+    if (firstAttempt.had404) {
+      await this.refreshQueryIds();
+      let secondAttempt = await tryOnce(variablesWithCount);
+      if (!secondAttempt.success && secondAttempt.error?.includes('Variable "$count"')) {
+        secondAttempt = await tryOnce(variablesWithoutCount);
+      }
       if (secondAttempt.success) {
         return { success: true, tweets: secondAttempt.tweets };
       }

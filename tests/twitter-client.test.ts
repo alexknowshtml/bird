@@ -1144,6 +1144,79 @@ describe('TwitterClient', () => {
     });
   });
 
+  describe('bookmark folders', () => {
+    let mockFetch: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockFetch = vi.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+    });
+
+    it('fetches bookmark folder timeline and parses tweet results', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            bookmark_collection_timeline: {
+              timeline: {
+                instructions: [
+                  {
+                    entries: [
+                      {
+                        content: {
+                          itemContent: {
+                            tweet_results: {
+                              result: {
+                                rest_id: '9',
+                                legacy: {
+                                  full_text: 'saved in folder',
+                                  created_at: '2024-01-01T00:00:00Z',
+                                  reply_count: 0,
+                                  retweet_count: 0,
+                                  favorite_count: 0,
+                                  conversation_id_str: '9',
+                                },
+                                core: {
+                                  user_results: {
+                                    result: {
+                                      rest_id: 'u9',
+                                      legacy: { screen_name: 'folder', name: 'Folder' },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      });
+
+      const client = new TwitterClient({ cookies: validCookies });
+      const result = await client.getBookmarkFolderTimeline('123', 2);
+
+      expect(result.success).toBe(true);
+      expect(result.tweets?.[0].id).toBe('9');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(options.method).toBe('GET');
+      expect(String(url)).toContain('/BookmarkFolderTimeline?');
+      const parsedVars = JSON.parse(new URL(url as string).searchParams.get('variables') as string);
+      expect(parsedVars.bookmark_collection_id).toBe('123');
+      expect(parsedVars.count).toBe(2);
+      const parsedFeatures = JSON.parse(new URL(url as string).searchParams.get('features') as string);
+      expect(parsedFeatures.graphql_timeline_v2_bookmark_timeline).toBe(true);
+    });
+  });
+
   describe('conversation helpers', () => {
     let mockFetch: ReturnType<typeof vi.fn>;
 

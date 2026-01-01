@@ -2,6 +2,9 @@
 
 ## 0.4.1 — Unreleased
 
+### Added
+- Quoted tweet data in JSON output + `--quote-depth` (thanks @alexknowshtml).
+
 ### Changed
 - Cookie extraction now uses `@steipete/sweet-cookie` (drops `sqlite3` CLI + custom browser readers in `bird`).
 

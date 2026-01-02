@@ -1,4 +1,4 @@
-import type { GraphqlTweetResult, TweetData, TwitterUser } from './twitter-client-types.js';
+import type { GraphqlMediaEntity, GraphqlTweetResult, TweetData, TweetMedia, TwitterUser } from './twitter-client-types.js';
 
 export function normalizeQuoteDepth(value?: number): number {
   if (value === undefined || value === null) {
@@ -153,6 +153,64 @@ export function extractTweetText(result: GraphqlTweetResult | undefined): string
   return extractArticleText(result) ?? extractNoteTweetText(result) ?? firstText(result?.legacy?.full_text);
 }
 
+export function extractMedia(result: GraphqlTweetResult | undefined): TweetMedia[] | undefined {
+  // Prefer extended_entities (has video info), fall back to entities
+  const rawMedia = result?.legacy?.extended_entities?.media ?? result?.legacy?.entities?.media;
+  if (!rawMedia || rawMedia.length === 0) {
+    return undefined;
+  }
+
+  const media: TweetMedia[] = [];
+
+  for (const item of rawMedia) {
+    if (!item.type || !item.media_url_https) {
+      continue;
+    }
+
+    const mediaItem: TweetMedia = {
+      type: item.type,
+      url: item.media_url_https,
+    };
+
+    // Get dimensions from largest available size
+    const sizes = item.sizes;
+    if (sizes?.large) {
+      mediaItem.width = sizes.large.w;
+      mediaItem.height = sizes.large.h;
+    } else if (sizes?.medium) {
+      mediaItem.width = sizes.medium.w;
+      mediaItem.height = sizes.medium.h;
+    }
+
+    // For thumbnails/previews
+    if (sizes?.small) {
+      mediaItem.previewUrl = `${item.media_url_https}:small`;
+    }
+
+    // Extract video URL for video/animated_gif
+    if ((item.type === 'video' || item.type === 'animated_gif') && item.video_info?.variants) {
+      // Find highest bitrate mp4 variant
+      const mp4Variants = item.video_info.variants
+        .filter((v): v is { bitrate: number; content_type: string; url: string } =>
+          v.content_type === 'video/mp4' && typeof v.bitrate === 'number' && typeof v.url === 'string'
+        )
+        .sort((a, b) => b.bitrate - a.bitrate);
+
+      if (mp4Variants.length > 0) {
+        mediaItem.videoUrl = mp4Variants[0].url;
+      }
+
+      if (item.video_info.duration_millis) {
+        mediaItem.durationMs = item.video_info.duration_millis;
+      }
+    }
+
+    media.push(mediaItem);
+  }
+
+  return media.length > 0 ? media : undefined;
+}
+
 export function unwrapTweetResult(result: GraphqlTweetResult | undefined): GraphqlTweetResult | undefined {
   if (!result) {
     return undefined;
@@ -187,6 +245,8 @@ export function mapTweetResult(result: GraphqlTweetResult | undefined, quoteDept
     }
   }
 
+  const media = extractMedia(result);
+
   return {
     id: result.rest_id,
     text,
@@ -202,6 +262,7 @@ export function mapTweetResult(result: GraphqlTweetResult | undefined, quoteDept
     },
     authorId: userId,
     quotedTweet,
+    media,
   };
 }
 
